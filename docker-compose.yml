@@ -1,0 +1,13 @@
+version: '3.9'
+services:
+  app:
+    tty: true
+    image: rss
+    ports:
+      - 8888:8888
+    volumes:
+      - .:/app
+      - cache:/home/worker
+
+volumes:
+  cache:

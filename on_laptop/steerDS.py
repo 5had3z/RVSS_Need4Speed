@@ -1,58 +1,48 @@
+from pathlib import Path
+from typing import List
+
+import cv2
 import numpy as np
-from glob import glob
 from torchvision import transforms
 from torch.utils.data import Dataset, DataLoader
-import cv2
-from glob import glob
-from os import path
+
 
 class SteerDataSet(Dataset):
-    
-    def __init__(self,root_folder,img_ext = ".jpg" , transform=None):
+    def __init__(self, root_folder: Path, img_ext: str = "jpg", transform=None):
+        self.img_ext = img_ext
         self.root_folder = root_folder
-        self.transform = transform        
-        self.img_ext = img_ext        
-        self.filenames = glob(path.join(self.root_folder,"*" + self.img_ext))            
-        self.totensor = transforms.ToTensor()
-        
-    def __len__(self):        
+        self.transform = transforms.ToTensor() if transform is None else transform
+        self.filenames: List[Path] = list(Path.glob(f"{root_folder}/*.{self.img_ext}"))
+
+    def __len__(self):
         return len(self.filenames)
-    
-    def __getitem__(self,idx):
-        f = self.filenames[idx]        
-        img = cv2.imread(f)
-        
-        if self.transform == None:
-            img = self.totensor(img)
-        else:
-            img = self.transform(img)   
-        
-        steering = f.split("/")[-1].split(self.img_ext)[0][6:]
-        steering = np.float32(steering)        
-    
-        sample = {"image":img , "steering":steering}        
-        
-        return sample
+
+    def __getitem__(self, idx):
+        f: Path = self.filenames[idx]
+        img = cv2.imread(str(f))
+        img = self.transform(img)
+        steering = np.float32(f.stem[6:])
+        return {"image": img, "steering": steering}
 
 
 def test():
     transform = transforms.Compose(
-    [transforms.ToTensor(),
-     transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
+        [
+            transforms.ToTensor(),
+            transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
+        ]
+    )
 
-    ds = SteerDataSet("../dev_data/training_data",".jpg",transform)
+    ds = SteerDataSet(Path("../dev_data/training_data"), "jpg", transform)
 
-    print("The dataset contains %d images " % len(ds))
+    print(f"The dataset contains {len(ds)} images ")
 
-    ds_dataloader = DataLoader(ds,batch_size=1,shuffle=True)
-    for S in ds_dataloader:
-        im = S["image"]    
-        y  = S["steering"]
-        
-        print(im.shape)
-        print(y)
+    ds_dataloader = DataLoader(ds, batch_size=1, shuffle=True)
+    for s in ds_dataloader:
+        im = s["image"]
+        y = s["steering"]
+        print(f"{im.shape} {y}")
         break
-
 
 
 if __name__ == "__main__":

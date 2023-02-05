@@ -1,17 +1,20 @@
 import numpy as np
 import requests
-import cv2      
+import cv2
 import time
 from threading import Thread
 
+
 def set_velocity(vel0, vel1):
-    r = requests.get("http://localhost:8080/robot/set/velocity?value="+str(vel0)+","+str(vel1))
+    r = requests.get(
+        "http://localhost:8080/robot/set/velocity?value=" + str(vel0) + "," + str(vel1)
+    )
 
 
 class VideoStreamWidget(object):
     def __init__(self, src=0):
         self.capture = cv2.VideoCapture(src)
-        print('Opened capture, start thread')
+        print("Opened capture, start thread")
         # Start the thread to read frames from the video stream
         self.thread = Thread(target=self.update, args=())
         self.thread.daemon = True
@@ -22,13 +25,13 @@ class VideoStreamWidget(object):
         while True:
             if self.capture.isOpened():
                 (self.status, self.frame) = self.capture.read()
-            time.sleep(.01)
-    
+            time.sleep(0.01)
+
     def show_frame(self):
         # Display frames in main program
-        cv2.imshow('frame', self.frame)
+        cv2.imshow("frame", self.frame)
         key = cv2.waitKey(1)
-        if key == ord('q'):
+        if key == ord("q"):
             self.capture.release()
             cv2.destroyAllWindows()
             exit(1)
