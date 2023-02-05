@@ -1,4 +1,4 @@
-import penguinPi as ppi
+import penguin_pi as ppi
 import time
 
 if __name__ == "__main__":
@@ -16,7 +16,7 @@ if __name__ == "__main__":
     time.sleep(2)
     print("grab image")
     image = camera.frame
-    print("image size %d by %d" % (image.shape[0], image.shape[1]))
+    print(f"image size {image.shape}")
     try:
         while True:
             image = camera.show_frame()

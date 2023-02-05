@@ -1,21 +1,24 @@
 #!/usr/bin/env python3
 import time
-import click
-import math
-import sys
+from pathlib import Path
 
-sys.path.append("..")
 import cv2
 import numpy as np
-import penguinPi as ppi
 import pygame
+
+import penguin_pi as ppi
+
+
+write_path = Path(__file__).parent / "data"
+print(f"Writing data to {write_path}")
 
 # ~~~~~~~~~~~~ SET UP Game ~~~~~~~~~~~~~~
 pygame.init()
-pygame.display.set_mode((300, 300))  # size of pop-up window
-pygame.key.set_repeat(
-    100
-)  # holding a key sends continuous KEYDOWN events. Input argument is milli-seconds delay between events and controls the sensitivity
+# size of pop-up window
+pygame.display.set_mode((300, 300))
+# holding a key sends continuous KEYDOWN events. Input argument is
+# milli-seconds delay between events and controls the sensitivity.
+pygame.key.set_repeat(100)
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 # stop the robot
@@ -66,8 +69,7 @@ try:
         right = int(Kd - Ka * angle)
 
         ppi.set_velocity(left, right)
-
-        cv2.imwrite("data/" + str(im_number).zfill(6) + "%.2f" % angle + ".jpg", image)
+        cv2.imwrite(str(write_path / f"{im_number:06}{angle:.2f}.jpg"), image)
         im_number += 1
 
 
