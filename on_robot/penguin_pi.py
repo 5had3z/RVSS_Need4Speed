@@ -11,6 +11,12 @@ def set_velocity(vel0, vel1):
     )
 
 
+def get_encoders():
+    encs = requests.get("http://localhost:8080/robot/get/encoder")
+    left_enc, right_enc = encs.text.split(",")
+    return int(left_enc), int(right_enc)
+
+
 class VideoStreamWidget(object):
     def __init__(self, src=0):
         self.capture = cv2.VideoCapture(src)
