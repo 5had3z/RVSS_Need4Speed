@@ -13,5 +13,8 @@ RUN pip3 install ipython matplotlib tqdm tensorboardx click \
 
 RUN pip3 install pygame --pre
 
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get -y install libgl1-mesa-glx
+RUN pip3 install requests
+
 RUN useradd -rm -d /home/worker -s /bin/bash -g root -G sudo -u 1000 worker
 USER worker
