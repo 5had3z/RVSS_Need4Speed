@@ -33,7 +33,7 @@ def test():
         ]
     )
 
-    ds = SteerDataSet(Path("../dev_data/training_data"), "jpg", transform)
+    ds = SteerDataSet("~/RVSS_Need4Speed/on_laptop/data", ".jpg", transform)
 
     print(f"The dataset contains {len(ds)} images ")
 
