@@ -6,9 +6,7 @@ import cv2
 
 
 def set_velocity(vel0, vel1):
-    r = requests.get(
-        "http://localhost:8080/robot/set/velocity?value=" + str(vel0) + "," + str(vel1)
-    )
+    r = requests.get(f"http://localhost:8080/robot/set/velocity?value={vel0},{vel1}")
 
 
 def get_encoders():
