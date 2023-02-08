@@ -81,7 +81,10 @@ try:
             right = int(Kd - Ka * angle)
             ppi.set_velocity(left, right)
 
-        cv2.imwrite(str(write_path / f"{im_number:06}-{angle:.2f}.jpg"), image)
+        filename = write_path / f"{im_number:06}.jpg"
+        cv2.imwrite(str(filename), image)
+        with open("annotation.txt", "a") as f:
+            f.write(f"{filename.name},{angle},{datetime.now()}\n")
         im_number += 1
 
 
