@@ -18,18 +18,6 @@ def mlp(num_channels: int):
     )
 
 
-def _generate_positions_for_encoding(spatial_shape, v_min=-1.0, v_max=1.0):
-    """
-    Create evenly spaced position coordinates for
-    spatial_shape with values in [v_min, v_max].
-    :param v_min: minimum coordinate value per dimension.
-    :param v_max: maximum coordinate value per dimension.
-    :return: position coordinates tensor of shape (*shape, len(shape)).
-    """
-    coords = [torch.linspace(v_min, v_max, steps=s) for s in spatial_shape]
-    return torch.stack(torch.meshgrid(*coords), dim=len(spatial_shape))
-
-
 def _generate_position_encodings(
     p: Tensor,
     num_frequency_bands: int,
@@ -67,7 +55,24 @@ def _generate_position_encodings(
         [torch.cos(math.pi * frequency_grid) for frequency_grid in frequency_grids]
     )
 
-    return torch.cat(encodings, dim=-1)
+    return torch.cat(encodings, dim=-1).to(torch.float32)
+
+
+def _generate_embeddings(
+    time_offset: Tensor, time_normalize: float, hidden_dim: int
+) -> Tensor:
+    """Generate feature embedding for time offsets"""
+    half_max = time_normalize / 2
+    norm_offset = (time_offset - half_max) / half_max
+    embeddings = []
+    for b_time_offset in norm_offset:
+        embeddings.append(
+            _generate_position_encodings(
+                b_time_offset[..., None], hidden_dim // 2, include_positions=False
+            )
+        )
+
+    return torch.stack(embeddings)
 
 
 class TimeDecoder(nn.Module):
@@ -76,7 +81,6 @@ class TimeDecoder(nn.Module):
         input_dim: int,
         hidden_dim: int = 256,
         history_length: int = 16,
-        max_history: float = 3,
     ) -> None:
         super().__init__()
         self.history_length = history_length
@@ -87,7 +91,6 @@ class TimeDecoder(nn.Module):
         self.time_attn = nn.MultiheadAttention(hidden_dim, 4, batch_first=True)
 
         # Setup time position encoding
-        self.time_normalize = max_history
         # p = _generate_positions_for_encoding([history_length])
         # time_enc = _generate_position_encodings(
         #     p, hidden_dim // 2, include_positions=False
@@ -102,30 +105,11 @@ class TimeDecoder(nn.Module):
         # Setup decoding output of mhsa to a yaw estimate
         self.decode_yawrate = nn.Linear(hidden_dim, 1)
 
-    def _generate_embeddings(self, time_offset: Tensor) -> Tensor:
-        """Generate feature embedding for time offsets"""
-        half_max = self.time_normalize / 2
-        norm_offset = (time_offset - half_max) / half_max
-        embeddings = []
-        for b_time_offset in norm_offset:
-            embeddings.append(
-                _generate_position_encodings(
-                    b_time_offset[..., None],
-                    self.hidden_dim // 2,
-                    include_positions=False,
-                )
-            )
-
-        return torch.stack(embeddings)
-
-    def forward(self, im_feats: Tensor, time_offset: Tensor) -> Tensor:
+    def forward(self, im_feats: Tensor, time_encoding: Tensor) -> Tensor:
         bs = im_feats.shape[0]
         # time_encoding = self.time_encoding.expand([bs, -1, -1])
         time_query = self.time_query.expand([bs, -1, -1])
         values = self.value_tf(im_feats)
-
-        time_encoding = self._generate_embeddings(time_offset)
-        # show_timeenc(time_encoding)
 
         yaw_embed, _ = self.time_attn(time_query, time_encoding, values)
         yaw_estimate = self.decode_yawrate(yaw_embed)
@@ -151,7 +135,7 @@ def _forward_impl_patch(self, x: Tensor) -> Tensor:
 
 
 class SequenceModel(nn.Module):
-    def __init__(self) -> None:
+    def __init__(self, max_history: float = 3) -> None:
         super().__init__()
         self.encoder = mobilenet_v3_small()
         # moneky patch to not classify
@@ -160,11 +144,12 @@ class SequenceModel(nn.Module):
         )
         self.encoder_dim = self.encoder.classifier[0].in_features
         self.decoder = TimeDecoder(self.encoder_dim)
+        self.time_normalize = max_history
 
     def export_onnx(
         self, input_shape: Tuple[int, int], savedir: Path = Path.cwd()
     ) -> None:
-        image = torch.empty((1, 3, *input_shape))
+        image = torch.empty((1, 3, *input_shape), dtype=torch.float32)
         torch.onnx.export(
             self.encoder,
             image,
@@ -174,8 +159,13 @@ class SequenceModel(nn.Module):
             output_names=["features"],
         )
 
-        tokens = torch.empty((1, self.decoder.history_length, self.encoder_dim))
-        timestamps = torch.empty((1, self.decoder.history_length))
+        tokens = torch.empty(
+            (1, self.decoder.history_length, self.encoder_dim), dtype=torch.float32
+        )
+        timestamps = torch.empty(
+            (1, self.decoder.history_length, self.decoder.hidden_dim),
+            dtype=torch.float32,
+        )
         torch.onnx.export(
             self.decoder,
             (tokens, timestamps),
@@ -187,16 +177,20 @@ class SequenceModel(nn.Module):
 
     def forward(self, inputs: Dict[str, Tensor]) -> Tensor:
         """Image stack [b,t,c,h,w]"""
-        images = inputs["image"]
-        time_offsets = inputs["time"]
-
         # Extract image features
         image_features = []
-        for t_idx in range(images.shape[1]):
-            image_features.append(self.encoder(images[:, t_idx]))
+        for t_idx in range(inputs["image"].shape[1]):
+            image_features.append(self.encoder(inputs["image"][:, t_idx]))
         image_features = torch.stack(image_features, dim=1)  # [b,t,c]
 
-        yaw_pred = self.decoder(image_features, time_offsets)[:, 0]  # [b,c]
+        # Generate time embeddings
+        time_embeddings = _generate_embeddings(
+            inputs["time"], self.time_normalize, self.decoder.hidden_dim
+        )
+        # show_timeenc(time_embeddings)
+
+        # Predict yaw output
+        yaw_pred = self.decoder(image_features, time_embeddings)[:, 0]  # [b,c]
         return yaw_pred
 
 
@@ -287,7 +281,7 @@ def test_onnx(niter: int) -> None:
     for _ in range(niter):
         session.run(None, {"input": dummy_input})
     time_taken = (time.perf_counter() - start) / niter
-    print(f"onnx time taken {time_taken:.2f}")
+    print(f"onnx time taken {time_taken:.3f}")
 
 
 def export_sequence(model: SequenceModel) -> None:
@@ -322,7 +316,7 @@ def profile_parts(niter: int) -> None:
     for _ in range(niter):
         session.run(None, {"image": image})
     time_taken = (time.perf_counter() - start) / niter
-    print(f"encoder time taken {time_taken:.2f}")
+    print(f"encoder time taken {time_taken:.3f}")
 
     # Decode yaw rate from features
     session = ort.InferenceSession("decoder.onnx")
@@ -335,7 +329,7 @@ def profile_parts(niter: int) -> None:
     for _ in range(niter):
         session.run(None, {"features": tokens, "timestamps": timestamps})
     time_taken = (time.perf_counter() - start) / niter
-    print(f"decoder time taken {time_taken:.2f}")
+    print(f"decoder time taken {time_taken:.3f}")
 
 
 def test_inference() -> None:
