@@ -38,7 +38,7 @@ class VideoStreamWidget:
             time.sleep(0.01)
 
     def get_frame(self):
-        return self.frame, self.timestamp if self.timestamp > 0 else None, None
+        return (self.frame, self.timestamp) if self.timestamp > 0 else (None, None)
 
     def show_frame(self):
         # Display frames in main program

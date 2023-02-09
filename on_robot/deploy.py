@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import logging
+from argparse import ArgumentParser
 from pathlib import Path
 
 import numpy as np
@@ -33,10 +34,10 @@ class Robot:
         while True:
             image, ts = self.camera.get_frame()
             if any(x is None for x in [image, ts]):
-                self.logger.info(f"tried to get frame")
+                self.logger.debug(f"tried to get frame")
                 continue
 
-            self.logger.info(f"got frame: {ts}")
+            self.logger.debug(f"got frame: {ts}")
             yaw = self.model.run_inference(image, ts)
 
             if yaw is None:  # Skip first few images
@@ -51,8 +52,12 @@ class Robot:
 
 
 def main() -> None:
+    parser = ArgumentParser()
+    parser.add_argument("--debug", action="store_true")
+    args = parser.parse_args()
+
     logging.basicConfig(
-        level=logging.INFO,
+        level=logging.DEBUG if args.debug else logging.INFO,
         format="%(asctime)s %(name)-8s %(levelname)-6s %(message)s",
     )
 

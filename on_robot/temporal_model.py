@@ -89,6 +89,10 @@ class TemporalModel:
 
     def preprocess_image(self, image: np.ndarray) -> np.ndarray:
         """preprocess image for inference"""
+        assert (
+            len(image.shape) == 3 and image.shape[-1] == 3
+        ), f"Expected HWC, got {image.shape}"
+
         # Transform to float image
         image = image.astype(np.float32) / 255
 
@@ -100,8 +104,9 @@ class TemporalModel:
         for idx, (mu, sgma) in enumerate(
             zip([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
         ):
-            image[:, idx] = (image[:, idx] - mu) / sgma
+            image[:, :, idx] = (image[:, :, idx] - mu) / sgma
 
+        image = np.moveaxis(image, -1, 0)[None]
         return image
 
     def run_inference(self, image, timestamp) -> Optional[float]:
