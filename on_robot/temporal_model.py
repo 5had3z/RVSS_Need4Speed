@@ -71,9 +71,6 @@ class TemporalModel:
         self.logger.info("Initializing Encoder...")
         self.encoder_session = ort.InferenceSession(str(weights_root / "encoder.onnx"))
 
-        self.buffer_size = self.feature_buffer.shape[1]
-        self.logger.info(f"Temporal Buffer Size: {self.buffer_size}")
-
         # Setup decoder
         self.logger.info("Initializing Decoder...")
         self.decoder_session = ort.InferenceSession(str(weights_root / "decoder.onnx"))
@@ -82,6 +79,9 @@ class TemporalModel:
         )
         self.time_ch = self.decoder_session.get_inputs()[1].shape[-1]
         self.timestamp_buffer = []
+
+        self.buffer_size = self.feature_buffer.shape[1]
+        self.logger.info(f"Temporal Buffer Size: {self.buffer_size}")
 
     def generate_timestamp_offsets(self) -> np.ndarray:
         end_time = self.timestamp_buffer[self.current_idx]
