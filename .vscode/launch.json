@@ -5,6 +5,22 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "Export Onnx",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/on_laptop/training/export_onnx.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "cwd": "${workspaceFolder}/on_laptop/training",
+            "args": [
+                "-x",
+                "checkpoints/seq_test",
+                "--input_shape",
+                "60",
+                "80"
+            ]
+        },
+        {
             "name": "Create Dataset",
             "type": "python",
             "request": "launch",
@@ -37,7 +53,7 @@
             "cwd": "${workspaceFolder}/on_laptop/training",
             "args": [
                 "-x",
-                "checkpoints/seq_test",
+                "checkpoints/l1_test",
                 "--epochs",
                 "10",
                 "--workers",

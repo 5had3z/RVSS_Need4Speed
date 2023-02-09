@@ -5,7 +5,11 @@ from typing import Dict, Optional, Tuple
 
 import torch
 from torch import nn, Tensor
-from torchvision.models import mobilenet_v3_small, MobileNetV3
+from torchvision.models import (
+    mobilenet_v3_small,
+    MobileNetV3,
+    MobileNet_V3_Small_Weights,
+)
 
 
 def mlp(num_channels: int):
@@ -137,7 +141,7 @@ def _forward_impl_patch(self, x: Tensor) -> Tensor:
 class SequenceModel(nn.Module):
     def __init__(self, max_history: float = 3) -> None:
         super().__init__()
-        self.encoder = mobilenet_v3_small()
+        self.encoder = mobilenet_v3_small(weights=MobileNet_V3_Small_Weights)
         # moneky patch to not classify
         self.encoder._forward_impl = _forward_impl_patch.__get__(
             self.encoder, MobileNetV3
@@ -197,7 +201,7 @@ class SequenceModel(nn.Module):
 class SingleModel(nn.Module):
     def __init__(self) -> None:
         super().__init__()
-        self.encoder = mobilenet_v3_small()
+        self.encoder = mobilenet_v3_small(weights=MobileNet_V3_Small_Weights)
         # moneky patch to not classify
         self.encoder._forward_impl = _forward_impl_patch.__get__(
             self.encoder, MobileNetV3

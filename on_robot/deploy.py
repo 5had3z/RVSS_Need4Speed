@@ -26,7 +26,6 @@ class Robot:
         angle = np.clip(angle, -0.5, 0.5)
         left = int(self.Kd + self.Ka * angle)
         right = int(self.Kd - self.Ka * angle)
-
         ppi.set_velocity(left, right)
 
     def spin(self) -> None:

@@ -144,6 +144,7 @@ def get_dataloader(config) -> Tuple[Dataset, Dataset]:
 
     dataset_cfg = config["dataloader"]["dataset"]
     loader_kwargs = dict(
+        drop_last=True,
         batch_size=config["dataloader"]["batch_size"],
         num_workers=config["dataloader"]["workers"],
     )
