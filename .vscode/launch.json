@@ -5,6 +5,21 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "Create Dataset",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/on_laptop/training/dataloader.py",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}/on_laptop/training",
+            "justMyCode": true,
+            "args": [
+                "--root",
+                "data/first_run",
+                "--split",
+                "0.8"
+            ]
+        },
+        {
             "name": "Time Infer",
             "type": "python",
             "request": "launch",
@@ -24,7 +39,9 @@
                 "-x",
                 "checkpoints/seq_test",
                 "--epochs",
-                "10"
+                "10",
+                "--workers",
+                "0"
             ],
             "env": {
                 "DATA_ROOT": "/home/bpfer/cloned-repos/RVSS_Need4Speed/on_laptop/training/data/first_run"

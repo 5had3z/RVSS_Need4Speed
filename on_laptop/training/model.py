@@ -1,6 +1,6 @@
 import math
 import time
-from typing import Optional, Tuple
+from typing import Dict, Optional, Tuple
 
 import torch
 from torch import nn, Tensor
@@ -71,21 +71,27 @@ def _generate_position_encodings(
 
 class TimeDecoder(nn.Module):
     def __init__(
-        self, input_dim: int, hidden_dim: int = 256, history_length: int = 16
+        self,
+        input_dim: int,
+        hidden_dim: int = 256,
+        history_length: int = 16,
+        max_history: float = 3,
     ) -> None:
         super().__init__()
         self.history_length = history_length
+        self.hidden_dim = hidden_dim
 
         # Setup actual decoder
         self.value_tf = nn.Linear(input_dim, hidden_dim)
         self.time_attn = nn.MultiheadAttention(hidden_dim, 4, batch_first=True)
 
         # Setup time position encoding
+        self.time_normalize = max_history
         p = _generate_positions_for_encoding([history_length])
-        time_enc = _generate_position_encodings(
-            p, hidden_dim // 2, include_positions=False
-        )
-        self.register_buffer("time_encoding", time_enc, persistent=False)
+        # time_enc = _generate_position_encodings(
+        #     p, hidden_dim // 2, include_positions=False
+        # )
+        # self.register_buffer("time_encoding", time_enc, persistent=False)
 
         # Setup learned embedding to query time
         self.time_query = nn.Parameter(torch.empty(1, hidden_dim))
@@ -95,13 +101,45 @@ class TimeDecoder(nn.Module):
         # Setup decoding output of mhsa to a yaw estimate
         self.decode_yawrate = nn.Linear(hidden_dim, 1)
 
-    def forward(self, x: Tensor) -> Tensor:
-        time_encoding = self.time_encoding.expand([x.shape[0], -1, -1])
-        time_query = self.time_query.expand([x.shape[0], -1, -1])
-        values = self.value_tf(x)
+    def _generate_embeddings(self, time_offset: Tensor) -> Tensor:
+        """Generate feature embedding for time offsets"""
+        half_max = self.time_normalize / 2
+        norm_offset = (time_offset - half_max) / half_max
+        embeddings = []
+        for b_time_offset in norm_offset:
+            embeddings.append(
+                _generate_position_encodings(
+                    b_time_offset[..., None],
+                    self.hidden_dim // 2,
+                    include_positions=False,
+                )
+            )
+
+        return torch.stack(embeddings)
+
+    def forward(self, im_feats: Tensor, time_offset: Tensor) -> Tensor:
+        bs = im_feats.shape[0]
+        # time_encoding = self.time_encoding.expand([bs, -1, -1])
+        time_query = self.time_query.expand([bs, -1, -1])
+        values = self.value_tf(im_feats)
+
+        time_encoding = self._generate_embeddings(time_offset)
+        # show_timeenc(time_encoding)
+
         yaw_embed, _ = self.time_attn(time_query, time_encoding, values)
         yaw_estimate = self.decode_yawrate(yaw_embed)
         return yaw_estimate
+
+
+def show_timeenc(time_encoding):
+    from matplotlib import pyplot as plt
+    import matplotlib
+
+    matplotlib.use("Agg")
+
+    plt.figure(figsize=(20, 20))
+    plt.imshow(time_encoding.detach())
+    plt.savefig("timeenc.png")
 
 
 def _forward_impl_patch(self, x: Tensor) -> Tensor:
@@ -122,14 +160,19 @@ class SequenceModel(nn.Module):
         self.encoder_dim = self.encoder.classifier[0].in_features
         self.decoder = TimeDecoder(self.encoder_dim)
 
-    def forward(self, x):
+    def forward(self, inputs: Dict[str, Tensor]) -> Tensor:
         """Image stack [b,t,c,h,w]"""
-        time_tokens = []
-        for t_idx in range(x.shape[1]):
-            time_tokens.append(self.encoder(x[:, t_idx]))
-        time_tokens = torch.stack(time_tokens, dim=1)  # [b,t,c]
-        x = self.decoder(time_tokens)  # [b,c]
-        return x
+        images = inputs["image"]
+        time_offsets = inputs["time"]
+
+        # Extract image features
+        image_features = []
+        for t_idx in range(images.shape[1]):
+            image_features.append(self.encoder(images[:, t_idx]))
+        image_features = torch.stack(image_features, dim=1)  # [b,t,c]
+
+        yaw_pred = self.decoder(image_features, time_offsets)[:, 0]  # [b,c]
+        return yaw_pred
 
 
 class SingleModel(nn.Module):

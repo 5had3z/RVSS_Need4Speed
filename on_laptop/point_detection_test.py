@@ -58,13 +58,18 @@ def run_deteciton(
 
     cv2.imwrite(str(writeFile), img)
 
-def detect_image(img: Path, outFolder: Path, algorithm: Callable[[np.ndarray], np.ndarray]) -> None:
+
+def detect_image(
+    img: Path, outFolder: Path, algorithm: Callable[[np.ndarray], np.ndarray]
+) -> None:
     """"""
-    
-def detect_folder(root: Path, outFolder: Path, algorithm: Callable[[np.ndarray], np.ndarray]) -> None;
+
+
+def detect_folder(
+    root: Path, outFolder: Path, algorithm: Callable[[np.ndarray], np.ndarray]
+) -> None:
     """"""
-    
-    
+
 
 def main() -> None:
     """main entrypoint to the test"""

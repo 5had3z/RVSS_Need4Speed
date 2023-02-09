@@ -4,7 +4,8 @@ model:
 dataloader:
   dataset:
     type: YawSequenceDataset
-    args: {}
+    args: 
+      downsample: 4
   batch_size: 16
 optimizer:
   type: SGD

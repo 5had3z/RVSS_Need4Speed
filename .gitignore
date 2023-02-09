@@ -2,3 +2,7 @@
 !pics/*.jpg
 *.pyc
 *.pt
+annotation*
+*.onnx
+*.avi
+**/checkpoints
