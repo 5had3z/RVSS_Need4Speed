@@ -26,7 +26,7 @@ def _generate_position_encodings(
         max_frequencies = p.shape[:-1]
 
     frequencies = [
-        np.linspace(1.0, max_freq / 2.0, num_frequency_bands, device=p.device)
+        np.linspace(1.0, max_freq / 2.0, num_frequency_bands)
         for max_freq in max_frequencies
     ]
     frequency_grids = []
@@ -78,9 +78,9 @@ class TemporalModel:
             self.decoder_session.get_inputs()[0].shape, dtype=np.float32
         )
         self.time_ch = self.decoder_session.get_inputs()[1].shape[-1]
-        self.timestamp_buffer = []
 
         self.buffer_size = self.feature_buffer.shape[1]
+        self.timestamp_buffer = self.buffer_size * [None]
         self.logger.info(f"Temporal Buffer Size: {self.buffer_size}")
 
     def generate_timestamp_offsets(self) -> np.ndarray:
@@ -97,7 +97,7 @@ class TemporalModel:
         image = image.astype(np.float32) / 255
 
         # Resize
-        infer_shape = self.encoder_session.get_inputs()[0].shape[-2:]
+        infer_shape = self.encoder_session.get_inputs()[0].shape[-2:][::-1]
         image = cv2.resize(image, infer_shape, interpolation=cv2.INTER_LINEAR)
 
         # Normalize
@@ -111,9 +111,9 @@ class TemporalModel:
 
     def run_inference(self, image, timestamp) -> Optional[float]:
         image_tf = self.preprocess_image(image)
-        self.feature_buffer[self.current_idx] = self.encoder_session.run(
+        self.feature_buffer[:, self.current_idx] = self.encoder_session.run(
             None, {"image": image_tf}
-        )
+        )[0]
         self.timestamp_buffer[self.current_idx] = timestamp
 
         if self.buffer_filled:
