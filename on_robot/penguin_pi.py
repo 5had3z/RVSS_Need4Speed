@@ -1,5 +1,6 @@
 import requests
 import time
+import logging
 from threading import Thread
 
 import cv2
@@ -17,11 +18,13 @@ def get_encoders():
 
 class VideoStreamWidget:
     def __init__(self, src=0):
+        self.logger = logging.getLogger("camera")
         self.capture = cv2.VideoCapture(src)
-        print("Opened capture, start thread")
+        self.logger.info(f"Opened capture {src}, start thread")
         # Start the thread to read frames from the video stream
         self.thread = Thread(target=self.update, args=())
         self.timestamp = 0
+        self.frame = None
         self.thread.daemon = True
         self.thread.start()
 
@@ -29,8 +32,9 @@ class VideoStreamWidget:
         # Read the next frame from the stream in a different thread
         while True:
             if self.capture.isOpened():
-                (self.status, self.frame) = self.capture.read()
+                self.status, self.frame = self.capture.read()
                 self.timestamp = time.time()
+                self.logger.debug("Captured Image")
             time.sleep(0.01)
 
     def get_frame(self):
