@@ -5,12 +5,30 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Python: Current File",
+            "name": "Time Infer",
             "type": "python",
             "request": "launch",
-            "program": "${workspaceFolder}/on_robot/collect.py",
+            "program": "${workspaceFolder}/on_laptop/training/model.py",
             "console": "integratedTerminal",
             "justMyCode": true
-        }
+        },
+        {
+            "name": "Train Model",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/on_laptop/training/trainer.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "cwd": "${workspaceFolder}/on_laptop/training",
+            "args": [
+                "-x",
+                "checkpoints/seq_test",
+                "--epochs",
+                "10"
+            ],
+            "env": {
+                "DATA_ROOT": "/home/bpfer/cloned-repos/RVSS_Need4Speed/on_laptop/training/data/first_run"
+            }
+        },
     ]
 }
