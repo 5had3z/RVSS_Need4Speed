@@ -83,7 +83,7 @@ try:
 
         filename = write_path / f"{im_number:06}.jpg"
         cv2.imwrite(str(filename), image)
-        with open("annotation.txt", "a") as f:
+        with open(write_path / "annotation.txt", "a") as f:
             f.write(f"{filename.name},{angle},{datetime.now()}\n")
         im_number += 1
 
