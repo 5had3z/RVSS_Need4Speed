@@ -1,5 +1,6 @@
 import math
 import time
+from pathlib import Path
 from typing import Dict, Optional, Tuple
 
 import torch
@@ -160,24 +161,25 @@ class SequenceModel(nn.Module):
         self.encoder_dim = self.encoder.classifier[0].in_features
         self.decoder = TimeDecoder(self.encoder_dim)
 
-    def export_onnx(self, input_shape: Tuple[int, int]) -> None:
+    def export_onnx(
+        self, input_shape: Tuple[int, int], savedir: Path = Path.cwd()
+    ) -> None:
         image = torch.empty((1, 3, *input_shape))
-        tokens = torch.empty((1, self.decoder.history_length, self.encoder_dim))
-        timestamps = torch.empty((1, self.decoder.history_length))
-
         torch.onnx.export(
             self.encoder,
             image,
-            "encoder.onnx",
+            savedir / "encoder.onnx",
             opset_version=13,
             input_names=["image"],
             output_names=["features"],
         )
 
+        tokens = torch.empty((1, self.decoder.history_length, self.encoder_dim))
+        timestamps = torch.empty((1, self.decoder.history_length))
         torch.onnx.export(
             self.decoder,
-            [tokens, timestamps],
-            "decoder.onnx",
+            (tokens, timestamps),
+            savedir / "decoder.onnx",
             opset_version=13,
             input_names=["features", "timestamps"],
             output_names=["yaw_rate"],
