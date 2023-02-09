@@ -15,12 +15,13 @@ def get_encoders():
     return int(left_enc), int(right_enc)
 
 
-class VideoStreamWidget(object):
+class VideoStreamWidget:
     def __init__(self, src=0):
         self.capture = cv2.VideoCapture(src)
         print("Opened capture, start thread")
         # Start the thread to read frames from the video stream
         self.thread = Thread(target=self.update, args=())
+        self.timestamp = 0
         self.thread.daemon = True
         self.thread.start()
 
@@ -29,7 +30,11 @@ class VideoStreamWidget(object):
         while True:
             if self.capture.isOpened():
                 (self.status, self.frame) = self.capture.read()
+                self.timestamp = time.time()
             time.sleep(0.01)
+
+    def get_frame(self):
+        return self.frame, self.timestamp if self.timestamp > 0 else None, None
 
     def show_frame(self):
         # Display frames in main program

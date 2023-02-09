@@ -1,48 +1,65 @@
 #!/usr/bin/env python3
-import time
+import logging
+from pathlib import Path
 
-import cv2
 import numpy as np
+
 import penguin_pi as ppi
+from temporal_model import TemporalModel
 
-# stop the robot
-ppi.set_velocity(0, 0)
-print("initialise camera")
-camera = ppi.VideoStreamWidget("http://localhost:8080/camera/get")
 
-# INITIALISE NETWORK HERE
+class Robot:
+    Kd = 30  # base wheel speeds, increase to go faster, decrease to go slower
+    Ka = 30  # how fast to turn when given an angle
 
-# LOAD NETWORK WEIGHTS HERE
+    def __init__(self) -> None:
+        self.logger = logging.getLogger("robot")
 
-# countdown before beginning
-print("Get ready...")
-time.sleep(1)
-print("3")
-time.sleep(1)
-print("2")
-time.sleep(1)
-print("1")
-time.sleep(1)
-print("GO!")
+        self.logger.info("Initializing Model...")
+        self.model = TemporalModel(Path.cwd())
 
-try:
-    angle = 0
-    while True:
-        # get an image from the the robot
-        image = camera.frame
+        self.logger.info("Initializing Camera...")
+        self.camera = ppi.VideoStreamWidget("http://localhost:8080/camera/get")
 
-        # TO DO: apply any image transformations
-
-        # TO DO: pass image through network to get a prediction for the steering angle
-
+    def _steering_command(self, angle: float) -> None:
         angle = np.clip(angle, -0.5, 0.5)
-        Kd = 30  # base wheel speeds, increase to go faster, decrease to go slower
-        Ka = 30  # how fast to turn when given an angle
-        left = int(Kd + Ka * angle)
-        right = int(Kd - Ka * angle)
+        left = int(self.Kd + self.Ka * angle)
+        right = int(self.Kd - self.Ka * angle)
 
         ppi.set_velocity(left, right)
 
+    def spin(self) -> None:
+        """"""
+        while True:
+            image, ts = self.camera.get_frame()
+            if any(x is None for x in [image, ts]):
+                self.logger.info(f"tried to get frame")
+                continue
 
-except KeyboardInterrupt:
-    ppi.set_velocity(0, 0)
+            self.logger.info(f"got frame: {ts}")
+            yaw = self.model.run_inference(image, ts)
+
+            if yaw is None:  # Skip first few images
+                continue
+
+            self.logger.info(f"steering command: {yaw}")
+            self._steering_command(yaw)
+
+    def stop(self) -> None:
+        """"""
+        ppi.set_velocity(0, 0)
+
+
+def main() -> None:
+    ppi.set_velocity(0, 0)  # ensure stopped
+    robot = Robot()
+    try:
+        robot.spin()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        robot.stop()
+
+
+if __name__ == "__main__":
+    main()

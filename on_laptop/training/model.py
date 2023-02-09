@@ -87,7 +87,7 @@ class TimeDecoder(nn.Module):
 
         # Setup time position encoding
         self.time_normalize = max_history
-        p = _generate_positions_for_encoding([history_length])
+        # p = _generate_positions_for_encoding([history_length])
         # time_enc = _generate_position_encodings(
         #     p, hidden_dim // 2, include_positions=False
         # )
@@ -159,6 +159,29 @@ class SequenceModel(nn.Module):
         )
         self.encoder_dim = self.encoder.classifier[0].in_features
         self.decoder = TimeDecoder(self.encoder_dim)
+
+    def export_onnx(self, input_shape: Tuple[int, int]) -> None:
+        image = torch.empty((1, 3, *input_shape))
+        tokens = torch.empty((1, self.decoder.history_length, self.encoder_dim))
+        timestamps = torch.empty((1, self.decoder.history_length))
+
+        torch.onnx.export(
+            self.encoder,
+            image,
+            "encoder.onnx",
+            opset_version=13,
+            input_names=["image"],
+            output_names=["features"],
+        )
+
+        torch.onnx.export(
+            self.decoder,
+            [tokens, timestamps],
+            "decoder.onnx",
+            opset_version=13,
+            input_names=["features", "timestamps"],
+            output_names=["yaw_rate"],
+        )
 
     def forward(self, inputs: Dict[str, Tensor]) -> Tensor:
         """Image stack [b,t,c,h,w]"""
@@ -265,17 +288,21 @@ def test_onnx(niter: int) -> None:
     print(f"onnx time taken {time_taken:.2f}")
 
 
-def export_parts() -> None:
-    model = SequenceModel().eval()
+def export_sequence(model: SequenceModel) -> None:
     image = torch.empty((1, 3, 240, 320))
     tokens = torch.empty((1, model.decoder.history_length, model.encoder_dim))
+    timestamps = torch.empty((1, model.decoder.history_length))
 
     torch.onnx.export(
         model.encoder, image, "encoder.onnx", opset_version=13, input_names=["image"]
     )
 
     torch.onnx.export(
-        model.decoder, tokens, "decoder.onnx", opset_version=13, input_names=["tokens"]
+        model.decoder,
+        [tokens, timestamps],
+        "decoder.onnx",
+        opset_version=13,
+        input_names=["features", "timestamps"],
     )
 
 
@@ -298,18 +325,21 @@ def profile_parts(niter: int) -> None:
     # Decode yaw rate from features
     session = ort.InferenceSession("decoder.onnx")
     tokens = np.empty(session.get_inputs()[0].shape, dtype=np.float32)
+    timestamps = np.empty(session.get_inputs()[1].shape, dtype=np.float32)
     print(f"Token shape: {tokens.shape}")
-    session.run(None, {"tokens": tokens})  # warm up
+    session.run(None, {"features": tokens, "timestamps": timestamps})  # warm up
 
     start = time.perf_counter()
     for _ in range(niter):
-        session.run(None, {"tokens": tokens})
+        session.run(None, {"features": tokens, "timestamps": timestamps})
     time_taken = (time.perf_counter() - start) / niter
     print(f"decoder time taken {time_taken:.2f}")
 
 
 def test_inference() -> None:
     niter = 5
+    model = SequenceModel().eval()
+    model.export_onnx([60, 80])
     # export_parts()
     profile_parts(niter)
 
