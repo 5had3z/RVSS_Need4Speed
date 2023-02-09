@@ -51,6 +51,11 @@ class Robot:
 
 
 def main() -> None:
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(name)-8s %(levelname)-6s %(message)s",
+    )
+
     ppi.set_velocity(0, 0)  # ensure stopped
     robot = Robot()
     try:

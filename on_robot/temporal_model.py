@@ -15,7 +15,7 @@ class TemporalModel:
 
         # Setup decoder
         self.logger.info("Initializing Decoder")
-        self.decoder_session = ort.InferenceSession(weights_root / "decoder.onnx")
+        self.decoder_session = ort.InferenceSession(str(weights_root / "decoder.onnx"))
         self.feature_buffer = np.empty(
             self.decoder_session.get_inputs()[0].shape, dtype=np.float32
         )
@@ -23,7 +23,7 @@ class TemporalModel:
 
         # Setup Encoder
         self.logger.info("Initializing Encoder")
-        self.encoder_session = ort.InferenceSession(weights_root / "encoder.onnx")
+        self.encoder_session = ort.InferenceSession(str(weights_root / "encoder.onnx"))
 
         self.buffer_size = self.feature_buffer.shape[1]
         self.logger.info(f"Temporal Buffer Size: {self.buffer_size}")
