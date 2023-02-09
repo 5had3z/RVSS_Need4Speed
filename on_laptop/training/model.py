@@ -74,6 +74,7 @@ class TimeDecoder(nn.Module):
         self, input_dim: int, hidden_dim: int = 256, history_length: int = 16
     ) -> None:
         super().__init__()
+        self.history_length = history_length
 
         # Setup actual decoder
         self.value_tf = nn.Linear(input_dim, hidden_dim)
@@ -118,9 +119,8 @@ class SequenceModel(nn.Module):
         self.encoder._forward_impl = _forward_impl_patch.__get__(
             self.encoder, MobileNetV3
         )
-        encoder_feats = self.encoder.classifier[0].in_features
-
-        self.decoder = TimeDecoder(encoder_feats)
+        self.encoder_dim = self.encoder.classifier[0].in_features
+        self.decoder = TimeDecoder(self.encoder_dim)
 
     def forward(self, x):
         """Image stack [b,t,c,h,w]"""
@@ -207,23 +207,68 @@ def export_onnx() -> None:
     )
 
 
-def testonnx(niter: int) -> None:
+def test_onnx(niter: int) -> None:
     import onnxruntime as ort
+    import numpy as np
 
-    dummy_input = torch.empty((1, 16, 3, 240, 320))
-
+    dummy_input = np.empty((1, 16, 3, 240, 320))
     session = ort.InferenceSession("model.onnx")
-    session.run(None, {"input": dummy_input.numpy()})  # warm up
+    session.run(None, {"input": dummy_input})  # warm up
+
     start = time.perf_counter()
     for _ in range(niter):
-        session.run(None, {"input": dummy_input.numpy()})
+        session.run(None, {"input": dummy_input})
     time_taken = (time.perf_counter() - start) / niter
     print(f"onnx time taken {time_taken:.2f}")
 
 
+def export_parts() -> None:
+    model = SequenceModel().eval()
+    image = torch.empty((1, 3, 240, 320))
+    tokens = torch.empty((1, model.decoder.history_length, model.encoder_dim))
+
+    torch.onnx.export(
+        model.encoder, image, "encoder.onnx", opset_version=13, input_names=["image"]
+    )
+
+    torch.onnx.export(
+        model.decoder, tokens, "decoder.onnx", opset_version=13, input_names=["tokens"]
+    )
+
+
+def profile_parts(niter: int) -> None:
+    import onnxruntime as ort
+    import numpy as np
+
+    # Encode image
+    session = ort.InferenceSession("encoder.onnx")
+    image = np.empty(session.get_inputs()[0].shape, dtype=np.float32)
+    print(f"Image shape: {image.shape}")
+    session.run(None, {"image": image})  # warm up
+
+    start = time.perf_counter()
+    for _ in range(niter):
+        session.run(None, {"image": image})
+    time_taken = (time.perf_counter() - start) / niter
+    print(f"encoder time taken {time_taken:.2f}")
+
+    # Decode yaw rate from features
+    session = ort.InferenceSession("decoder.onnx")
+    tokens = np.empty(session.get_inputs()[0].shape, dtype=np.float32)
+    print(f"Token shape: {tokens.shape}")
+    session.run(None, {"tokens": tokens})  # warm up
+
+    start = time.perf_counter()
+    for _ in range(niter):
+        session.run(None, {"tokens": tokens})
+    time_taken = (time.perf_counter() - start) / niter
+    print(f"decoder time taken {time_taken:.2f}")
+
+
 def test_inference() -> None:
     niter = 5
-    testonnx(niter)
+    # export_parts()
+    profile_parts(niter)
 
 
 if __name__ == "__main__":
