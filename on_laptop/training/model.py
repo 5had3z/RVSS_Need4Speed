@@ -182,22 +182,48 @@ def profile_sequence(niter: int) -> None:
     dummy_input = torch.empty((1, 16, 3, 240, 320))
     model = SequenceModel().eval()
 
-    print(f"Std Time Taken {profile_model(model, dummy_input, niter)}")
+    print(f"Std Time Taken {profile_model(model, dummy_input, niter):.3f}s")
 
     with torch.jit.optimized_execution(True):
         jit_model = torch.jit.trace(model, dummy_input)
-        print(f"JIT Time Taken {profile_model(jit_model, dummy_input, niter)}")
+        print(f"JIT Time Taken {profile_model(jit_model, dummy_input, niter):.3f}s")
+        torch.jit.save(jit_model, "model.jit.pt")
 
         mob_optim = optimize_for_mobile(jit_model)
-        print(f"Mobile Time Taken {profile_model(mob_optim, dummy_input, niter)}")
+        print(f"Mobile Time Taken {profile_model(mob_optim, dummy_input, niter):.3f}s")
+
+        torch.jit.save(mob_optim, "mobile.jit.pt")
 
     with torch.autocast(device_type="cpu"):
-        print(f"Autocast Time Taken {profile_model(model, dummy_input, niter)}")
+        print(f"Autocast Time Taken {profile_model(model, dummy_input, niter):.3f}s")
+
+
+def export_onnx() -> None:
+    dummy_input = torch.empty((1, 16, 3, 240, 320))
+    model = SequenceModel().eval()
+
+    torch.onnx.export(
+        model, dummy_input, "model.onnx", opset_version=13, input_names=["input"]
+    )
+
+
+def testonnx(niter: int) -> None:
+    import onnxruntime as ort
+
+    dummy_input = torch.empty((1, 16, 3, 240, 320))
+
+    session = ort.InferenceSession("model.onnx")
+    session.run(None, {"input": dummy_input.numpy()})  # warm up
+    start = time.perf_counter()
+    for _ in range(niter):
+        session.run(None, {"input": dummy_input.numpy()})
+    time_taken = (time.perf_counter() - start) / niter
+    print(f"onnx time taken {time_taken:.2f}")
 
 
 def test_inference() -> None:
     niter = 5
-    profile_sequence(niter)
+    testonnx(niter)
 
 
 if __name__ == "__main__":
