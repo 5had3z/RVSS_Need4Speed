@@ -23,7 +23,7 @@ class VideoStreamWidget:
         self.logger.info(f"Opened capture {src}, start thread")
         # Start the thread to read frames from the video stream
         self.thread = Thread(target=self.update, args=())
-        self.timestamp = 0
+        self.timestamp = -1
         self.frame = None
         self.thread.daemon = True
         self.thread.start()
@@ -32,7 +32,7 @@ class VideoStreamWidget:
         # Read the next frame from the stream in a different thread
         while True:
             if self.capture.isOpened():
-                self.status, self.frame = self.capture.read()
+                _, self.frame = self.capture.read()
                 self.timestamp = time.time()
                 self.logger.debug("Captured Image")
             time.sleep(0.01)
