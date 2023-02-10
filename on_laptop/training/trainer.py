@@ -149,6 +149,10 @@ def train(modules: TrainModules, epochs: int, root_path: Path):
     start_epoch = resume_checkpoint(modules, ckpt_path) if ckpt_path.exists() else 0
 
     for epoch in range(start_epoch, epochs):
+        logger.add_scalar(
+            "lr", modules.scheduler.get_last_lr()[0], len(modules.train_loader) * epoch
+        )
+
         train_epoch(
             modules.model,
             modules.train_loader,
@@ -167,6 +171,8 @@ def train(modules: TrainModules, epochs: int, root_path: Path):
             epoch + 1,
             epochs,
         )
+
+        modules.scheduler.step()
 
         save_checkpoint(modules, epoch + 1, ckpt_path)
 

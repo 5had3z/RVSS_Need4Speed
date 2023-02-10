@@ -18,5 +18,5 @@ def get_scheduler(config, optim) -> _LRScheduler:
         "ExponentialLR": ExponentialLR,
     }
     sched_cfg = config["scheduler"]
-    scheduler = schedulers[sched_cfg["type"]](optim, *sched_cfg["args"])
+    scheduler = schedulers[sched_cfg["type"]](optimizer=optim, **sched_cfg["args"])
     return scheduler
