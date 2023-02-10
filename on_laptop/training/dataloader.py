@@ -43,6 +43,15 @@ def write_dataset(dataset: List[YawRateSample], ann_file: Path) -> None:
             f.write(f"{sample}\n")
 
 
+class CropTop:
+    def __init__(self, first_row: int) -> None:
+        self.first_row = first_row
+
+    def __call__(self, img: Tensor) -> Tensor:
+        """Assume CHW"""
+        return img[:, self.first_row :, :]
+
+
 class YawDataset(Dataset):
     base_shape = [240, 320]
     ch_last = False
@@ -53,6 +62,7 @@ class YawDataset(Dataset):
         downsample: int = 1,
         classes: bool = False,
         suffix: str = None,
+        crop_top: bool = False,
     ) -> None:
         super().__init__()
         assert split in {"train", "val"}, f"Incorrect split: {split}"
@@ -75,6 +85,9 @@ class YawDataset(Dataset):
             transforms.append(
                 transform.Resize([s // downsample for s in YawDataset.base_shape])
             )
+
+        if crop_top:
+            transforms.append(CropTop(15))
 
         transforms.append(
             transform.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
@@ -321,7 +334,7 @@ def analyse_data() -> None:
 
     os.environ[
         "DATA_ROOT"
-    ] = "/home/bryce/cloned-repos/RVSS_Need4Speed/on_laptop/training/data"
+    ] = "/home/bpfer/cloned-repos/RVSS_Need4Speed/on_laptop/training/data/first_run"
 
     cfg = {
         "dataloader": {

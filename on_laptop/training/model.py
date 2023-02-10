@@ -277,6 +277,27 @@ class CustomV2(nn.Module):
         return feats
 
 
+class CustomV3(nn.Module):
+    def __init__(self, out_channels: int = 128) -> None:
+        super().__init__()
+        self.conv_down = nn.Sequential(
+            _DSConv(3, 8, stride=2),
+            _DSConv(8, 24, stride=2),
+            _DSConv(24, 16, stride=2),
+        )
+        self.avg_pool = nn.AvgPool2d([2, 2], [2, 2])
+        # We assume latent feature of (h=3,w=5)
+        self.linear_out = nn.Linear(3 * 5 * 16, out_channels)
+        self.output_dim = out_channels
+
+    def forward(self, image: Tensor) -> Tensor:
+        """"""
+        feats: Tensor = self.conv_down(image)
+        feats = self.avg_pool(feats)
+        feats = self.linear_out(feats.flatten(1))
+        return feats
+
+
 def get_encoder(name: str, pretrained: bool) -> MobileNetV3:
     if name == "small":
         return mobilenet_v3_small(
@@ -288,6 +309,8 @@ def get_encoder(name: str, pretrained: bool) -> MobileNetV3:
         return CustomV1()
     elif name == "customv2":
         return CustomV2()
+    elif name == "customv3":
+        return CustomV3()
     else:
         raise NotImplementedError(name)
 
