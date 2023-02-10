@@ -122,6 +122,11 @@ class TemporalModel:
             yaw_ctrl = self.decoder_session.run(
                 None, {"features": self.feature_buffer, "timestamps": time_embeddings}
             )
+            yaw_ctrl = (
+                (np.argmax(yaw_ctrl) - 5).item() / 10
+                if yaw_ctrl.shape[-1] > 1
+                else yaw_ctrl.item()
+            )
         else:
             yaw_ctrl = None
 
