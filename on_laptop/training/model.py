@@ -1,15 +1,51 @@
 import math
 import time
 from pathlib import Path
-from typing import Dict, Optional, Tuple
+from functools import partial
+from typing import Any, Dict, Optional, Tuple, Literal
 
 import torch
 from torch import nn, Tensor
-from torchvision.models import (
+from torchvision.models.mobilenetv3 import (
     mobilenet_v3_small,
     MobileNetV3,
     MobileNet_V3_Small_Weights,
+    InvertedResidualConfig,
 )
+
+
+def mobilenet_v3_tiny(
+    width_mult: float = 1.0,
+    reduced_tail: bool = False,
+    dilated: bool = False,
+    **kwargs: Any,
+):
+    reduce_divider = 2 if reduced_tail else 1
+    dilation = 2 if dilated else 1
+
+    bneck_conf = partial(InvertedResidualConfig, width_mult=width_mult)
+    adjust_channels = partial(
+        InvertedResidualConfig.adjust_channels, width_mult=width_mult
+    )
+
+    # fmt: off
+    inverted_residual_setting = [
+            bneck_conf(8, 3, 8, 8, True, "RE", 2, 1),  # C1
+            bneck_conf(8, 3, 36, 12, False, "RE", 2, 1),  # C2
+            bneck_conf(12, 3, 44, 12, False, "RE", 1, 1),
+            bneck_conf(12, 5, 48, 20, True, "HS", 2, 1),  # C3
+            bneck_conf(20, 5, 120, 20, True, "HS", 1, 1),
+            bneck_conf(20, 5, 120, 24, True, "HS", 1, 1),
+            bneck_conf(24, 5, 144, 48 // reduce_divider, True, "HS", 2, dilation),  # C4
+            bneck_conf(48 // reduce_divider, 5, 288 // reduce_divider, 48 // reduce_divider, True, "HS", 1, dilation),
+            bneck_conf(48 // reduce_divider, 5, 288 // reduce_divider, 48 // reduce_divider, True, "HS", 1, dilation),
+        ]
+    last_channel = adjust_channels(512 // reduce_divider)  # C5
+    # fmt: on
+
+    model = MobileNetV3(inverted_residual_setting, last_channel, **kwargs)
+
+    return model
 
 
 def mlp(num_channels: int):
@@ -95,13 +131,6 @@ class TimeDecoder(nn.Module):
         self.value_tf = nn.Linear(input_dim, hidden_dim)
         self.time_attn = nn.MultiheadAttention(hidden_dim, 4, batch_first=True)
 
-        # Setup time position encoding
-        # p = _generate_positions_for_encoding([history_length])
-        # time_enc = _generate_position_encodings(
-        #     p, hidden_dim // 2, include_positions=False
-        # )
-        # self.register_buffer("time_encoding", time_enc, persistent=False)
-
         # Setup learned embedding to query time
         self.time_query = nn.Parameter(torch.empty(1, hidden_dim))
         with torch.no_grad():
@@ -183,23 +212,106 @@ def _forward_impl_patch(self, x: Tensor) -> Tensor:
     return x
 
 
+class _DSConv(nn.Module):
+    """Depthwise Separable Convolutions"""
+
+    def __init__(self, dw_channels, out_channels, stride=1, **kwargs):
+        super().__init__()
+        self.conv = nn.Sequential(
+            nn.Conv2d(
+                dw_channels, dw_channels, 3, stride, 1, groups=dw_channels, bias=False
+            ),
+            nn.BatchNorm2d(dw_channels),
+            nn.ReLU(True),
+            nn.Conv2d(dw_channels, out_channels, 1, bias=False),
+            nn.BatchNorm2d(out_channels),
+            nn.ReLU(True),
+        )
+
+    def forward(self, x):
+        return self.conv(x)
+
+
+class CustomV1(nn.Module):
+    def __init__(self, out_channels: int = 256) -> None:
+        super().__init__()
+        self.conv_down = nn.Sequential(
+            _DSConv(3, 8, stride=2),
+            _DSConv(8, 24, stride=2),
+            _DSConv(24, 32, stride=2),
+        )
+        self.avg_pool = nn.AdaptiveAvgPool2d(3)
+        self.linear_out = nn.Linear(9 * 32, out_channels)
+        self.output_dim = out_channels
+
+    def forward(self, image: Tensor) -> Tensor:
+        """"""
+        feats: Tensor = self.conv_down(image)
+        feats = self.avg_pool(feats)
+        feats = self.linear_out(feats.flatten(1))
+        return feats
+
+
+class CustomV2(nn.Module):
+    def __init__(self, out_channels: int = 128) -> None:
+        super().__init__()
+        self.conv_down = nn.Sequential(
+            _DSConv(3, 8, stride=2),
+            _DSConv(8, 24, stride=2),
+            _DSConv(24, 32, stride=2),
+        )
+        self.avg_pool = nn.AdaptiveAvgPool2d([2, 3])
+        self.linear_out = nn.Linear(2 * 3 * 32, out_channels)
+        self.output_dim = out_channels
+
+    def forward(self, image: Tensor) -> Tensor:
+        """"""
+        feats: Tensor = self.conv_down(image)
+        feats = self.avg_pool(feats)
+        feats = self.linear_out(feats.flatten(1))
+        return feats
+
+
+def get_encoder(name: str, pretrained: bool) -> MobileNetV3:
+    if name == "small":
+        return mobilenet_v3_small(
+            weights=MobileNet_V3_Small_Weights.DEFAULT if pretrained else None
+        )
+    elif name == "tiny":
+        return mobilenet_v3_tiny()
+    elif name == "customv1":
+        return CustomV1()
+    elif name == "customv2":
+        return CustomV2()
+    else:
+        raise NotImplementedError(name)
+
+
 class SequenceModel(nn.Module):
     def __init__(
         self,
         max_history: float = 3,
         class_decoder: bool = False,
         pretrained: bool = True,
+        attn_dim: int = 256,
+        encoder: Literal["tiny", "small"] = "small",
     ) -> None:
         super().__init__()
-        self.encoder = mobilenet_v3_small(
-            weights=MobileNet_V3_Small_Weights.DEFAULT if pretrained else None
-        )
+
+        self.encoder = get_encoder(encoder, pretrained)
+
         # moneky patch to not classify
-        self.encoder._forward_impl = _forward_impl_patch.__get__(
-            self.encoder, MobileNetV3
+        if isinstance(self.encoder, MobileNetV3):
+            self.encoder._forward_impl = _forward_impl_patch.__get__(
+                self.encoder, MobileNetV3
+            )
+            self.encoder_dim = self.encoder.classifier[0].in_features
+        else:
+            self.encoder_dim = self.encoder.output_dim
+
+        self.decoder = TimeDecoder(
+            self.encoder_dim, hidden_dim=attn_dim, class_decoder=class_decoder
         )
-        self.encoder_dim = self.encoder.classifier[0].in_features
-        self.decoder = TimeDecoder(self.encoder_dim, class_decoder=class_decoder)
         self.time_normalize = max_history
 
     def export_onnx(
@@ -254,11 +366,19 @@ class SequenceModel2(SequenceModel):
     """Keys include both time and image features"""
 
     def __init__(
-        self, *args, class_decoder: bool = False, history_length: int = 16, **kwargs
+        self,
+        *args,
+        class_decoder: bool = False,
+        attn_dim: int = 256,
+        history_length: int = 16,
+        **kwargs,
     ) -> None:
         super().__init__(*args, class_decoder=class_decoder, **kwargs)
         self.decoder = TimeDecoder2(
-            self.encoder_dim, history_length=history_length, class_decoder=class_decoder
+            self.encoder_dim,
+            hidden_dim=attn_dim,
+            history_length=history_length,
+            class_decoder=class_decoder,
         )
 
     def export_onnx(
@@ -309,11 +429,12 @@ class SequenceModel2(SequenceModel):
 
 
 class SingleModel(nn.Module):
-    def __init__(self, pretrained: bool = True) -> None:
+    def __init__(
+        self, pretrained: bool = True, encoder: Literal["tiny", "small"] = "small"
+    ) -> None:
         super().__init__()
-        self.encoder = mobilenet_v3_small(
-            weights=MobileNet_V3_Small_Weights.DEFAULT if pretrained else None
-        )
+        self.encoder = get_encoder(encoder, pretrained)
+
         # moneky patch to not classify
         self.encoder._forward_impl = _forward_impl_patch.__get__(
             self.encoder, MobileNetV3

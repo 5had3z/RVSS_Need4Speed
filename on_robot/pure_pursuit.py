@@ -32,7 +32,6 @@ class TargetCourse:
         self.old_nearest_point_index = None
 
     def search_target_index(self, state):
-
         # To speed up nearest point search, doing it at only first time.
         if self.old_nearest_point_index is None:
             # search nearest point index
