@@ -6,7 +6,6 @@ import yaml
 
 import torch
 from torch import nn, Tensor, inference_mode
-import torch.functional as F
 from torch.utils.tensorboard.writer import SummaryWriter
 from tqdm.auto import tqdm
 
@@ -47,11 +46,13 @@ def resume_checkpoint(modules: TrainModules, ckpt_path: Path) -> int:
 
 def calc_accuracy(truth_yaw: Tensor, pred_yaw: Tensor) -> float:
     if truth_yaw.shape[-1] == 1:
-        return "mse", (truth_yaw - pred_yaw).pow(2).mean().item()
+        return {"mse": (truth_yaw - pred_yaw).pow(2).mean().item()}
 
     pred_logits = pred_yaw.argmax(dim=-1)
     accuracy = (pred_logits == truth_yaw).sum() / truth_yaw.nelement()
-    return "accuracy", accuracy
+    # cls/10 = angle radians
+    mse = ((truth_yaw - pred_yaw) / 10).pow(2).mean().item()
+    return {"accuracy": accuracy, "mse": mse}
 
 
 def train_epoch(
@@ -128,6 +129,7 @@ def validate_epoch(
 
 
 def train(modules: TrainModules, epochs: int, root_path: Path):
+    """Train model to target epoch, save checkpoints to root_path"""
     logger = SummaryWriter(root_path)
 
     ckpt_path = root_path / "latest.pth"
