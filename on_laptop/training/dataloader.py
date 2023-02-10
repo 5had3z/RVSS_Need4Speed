@@ -48,15 +48,22 @@ class YawDataset(Dataset):
     ch_last = False
 
     def __init__(
-        self, split: Literal["train", "val"], downsample: int = 1, classes: bool = False
+        self,
+        split: Literal["train", "val"],
+        downsample: int = 1,
+        classes: bool = False,
+        suffix: str = None,
     ) -> None:
         super().__init__()
         assert split in {"train", "val"}, f"Incorrect split: {split}"
 
         self.root = Path(os.environ.get("DATA_ROOT", "/data"))
-        self.dataset: List[YawRateSample] = read_dataset(
-            self.root / f"annotation_{split}.txt"
+        filename = (
+            f"annotation_{split}.txt"
+            if suffix is None
+            else f"annotation_{split}_{suffix}.txt"
         )
+        self.dataset: List[YawRateSample] = read_dataset(self.root / filename)
         self.dataset.sort(key=lambda x: x.time)
 
         for sample in self.dataset:
@@ -285,10 +292,10 @@ def split_data() -> None:
     data = accumulate_subsets(root)
     n_train = int(len(data) * ratio)
 
-    split_file = root / f"annotation_train.txt"
+    split_file = root / f"annotation_train_v3.txt"
     write_dataset(data[:n_train], split_file)
 
-    split_file = root / f"annotation_val.txt"
+    split_file = root / f"annotation_val_v3.txt"
     write_dataset(data[n_train:], split_file)
 
     print(f"finished splitting {len(data)} samples")
@@ -322,4 +329,4 @@ def analyse_data() -> None:
 
 
 if __name__ == "__main__":
-    analyse_data()
+    split_data()
