@@ -72,6 +72,9 @@ def train_epoch(
             optimizer.zero_grad()
             preds = model(sample)
 
+            if "yaw" in sample and len(sample["yaw"].shape) == 1:
+                sample["yaw"] = sample["yaw"].unsqueeze(-1)
+
             total_loss = torch.zeros(1)
             for crit in criterion:
                 loss: Tensor = criterion[crit](preds, sample["yaw"])
@@ -111,6 +114,10 @@ def validate_epoch(
     ) as pbar:
         for sample in dataloader:
             preds = model(sample)
+
+            if "yaw" in sample and len(sample["yaw"].shape) == 1:
+                sample["yaw"] = sample["yaw"].unsqueeze(-1)
+
             for crit in criterion:
                 loss: Tensor = criterion[crit](preds, sample["yaw"])
                 loss_samples[crit].append(loss.item())
