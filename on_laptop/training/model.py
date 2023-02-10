@@ -254,6 +254,35 @@ class SequenceModel2(SequenceModel):
             self.encoder_dim, history_length=history_length, class_decoder=class_decoder
         )
 
+    def export_onnx(
+        self, input_shape: Tuple[int, int], savedir: Path = Path.cwd()
+    ) -> None:
+        image = torch.empty((1, 3, *input_shape), dtype=torch.float32)
+        torch.onnx.export(
+            self.encoder,
+            image,
+            savedir / "encoder.onnx",
+            opset_version=13,
+            input_names=["image"],
+            output_names=["features"],
+        )
+
+        tokens = torch.empty(
+            (1, self.decoder.history_length, self.encoder_dim), dtype=torch.float32
+        )
+        timestamps = torch.empty(
+            (1, self.decoder.history_length, self.decoder.hidden_dim // 2),
+            dtype=torch.float32,
+        )
+        torch.onnx.export(
+            self.decoder,
+            (tokens, timestamps),
+            savedir / "decoder.onnx",
+            opset_version=13,
+            input_names=["features", "timestamps"],
+            output_names=["yaw_rate"],
+        )
+
     def forward(self, inputs: Dict[str, Tensor]) -> Tensor:
         """Image stack [b,t,c,h,w]"""
         # Extract image features

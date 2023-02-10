@@ -66,6 +66,8 @@ class TemporalModel:
         self.logger = logging.getLogger("model")
         self.current_idx = 0
         self.buffer_filled = False
+        self.time_norm = 1.5
+        self.logger.info(f"Using Time Normalization {self.time_norm}")
 
         # Setup Encoder
         self.logger.info("Initializing Encoder...")
@@ -118,7 +120,9 @@ class TemporalModel:
 
         if self.buffer_filled:
             time_deltas = self.generate_timestamp_offsets()
-            time_embeddings = _generate_embeddings(time_deltas, 3, self.time_ch)
+            time_embeddings = _generate_embeddings(
+                time_deltas, self.time_norm, self.time_ch
+            )
             yaw_ctrl = self.decoder_session.run(
                 None, {"features": self.feature_buffer, "timestamps": time_embeddings}
             )
