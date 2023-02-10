@@ -417,6 +417,23 @@ class SequenceModel2(SequenceModel):
             output_names=["yaw_rate"],
         )
 
+    def export_script(
+        self, input_shape: Tuple[int, int], savedir: Path = Path.cwd()
+    ) -> None:
+        image = torch.empty((1, 3, *input_shape), dtype=torch.float32)
+        script_enc = torch.jit.trace(self.encoder, image)
+        torch.jit.save(script_enc, savedir / "encoder.jit")
+
+        tokens = torch.empty(
+            (1, self.decoder.history_length, self.encoder_dim), dtype=torch.float32
+        )
+        timestamps = torch.empty(
+            (1, self.decoder.history_length, self.decoder.hidden_dim // 2),
+            dtype=torch.float32,
+        )
+        script_dec = torch.jit.trace(self.decoder, (tokens, timestamps))
+        torch.jit.save(script_dec, savedir / "decoder.jit")
+
     def forward(self, inputs: Dict[str, Tensor]) -> Tensor:
         """Image stack [b,t,c,h,w]"""
         # Extract image features

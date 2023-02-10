@@ -193,7 +193,7 @@ def train(
         save_checkpoint(modules, epoch + 1, ckpt_path)
         if (epoch + 1) % 10 == 0:
             save_checkpoint(
-                modules, epoch + 1, ckpt_path.parent / f"epoch_{epoch:03}.pth"
+                modules, epoch + 1, ckpt_path.parent / f"epoch_{epoch+1:03}.pth"
             )
 
 
