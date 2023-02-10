@@ -142,9 +142,73 @@ class YawSequenceDataset(YawDataset):
 
         end_time = self.dataset[index][-1].time.timestamp()
         t_delta = tensor([end_time - s.time.timestamp() for s in self.dataset[index]])
+        assert torch.all(t_delta >= 0), "negative delta???"
 
         ims = torch.stack(ims, dim=0)
         label = tensor(self.dataset[index][-1].yaw)
+
+        if self.classes:
+            label = self._yaw_2_class(label)
+
+        return {"image": ims, "time": t_delta, "yaw": label}
+
+
+class YawSequenceDataset2(YawDataset):
+    def __init__(
+        self,
+        *args,
+        max_period_ms: float = 150.0,
+        seq_length: int = 16,
+        stride: int = 4,
+        **kwargs,
+    ) -> None:
+        super().__init__(*args, **kwargs)
+        self.stride = stride
+        self.seq_length = seq_length
+        self.max_period = timedelta(milliseconds=max_period_ms)
+
+    def __len__(self) -> int:
+        return (len(self.dataset) - self.seq_length) // self.stride
+
+    def get_next_valid_sequence(self, index) -> int:
+        has_wrapped = False
+        cond = lambda nxt, prv: nxt - prv < self.max_period and nxt - prv > timedelta(0)
+
+        while True:
+            if index == len(self):
+                if has_wrapped:
+                    raise RecursionError("Iterated over whole dataset")
+                index = 0
+                has_wrapped = True
+
+            end_idx = index + self.seq_length
+            if all(
+                cond(x.time, y.time)
+                for x, y in zip(
+                    self.dataset[index + 1 : end_idx], self.dataset[index : end_idx - 1]
+                )
+            ):
+                return index
+
+            index += 1
+
+    def __getitem__(self, index: int) -> Tuple[Tensor, Tensor]:
+        s_idx = self.get_next_valid_sequence(index * self.stride)
+        e_idx = s_idx + self.seq_length
+        ims = []
+        for idx in range(s_idx, e_idx):
+            sample = self.dataset[idx]
+            im = Image.open(str(self.root / sample.filename))
+            ims.append(self.transform(im))
+
+        end_time = self.dataset[e_idx - 1].time.timestamp()
+        t_delta = tensor(
+            [end_time - s.time.timestamp() for s in self.dataset[s_idx:e_idx]]
+        )
+        assert torch.all(t_delta >= 0), "negative delta???"
+
+        ims = torch.stack(ims, dim=0)
+        label = tensor(self.dataset[e_idx].yaw)
 
         if self.classes:
             label = self._yaw_2_class(label)
@@ -157,6 +221,7 @@ def get_dataloader(config) -> Tuple[Dataset, Dataset]:
     dataset_types = {
         "YawDataset": YawDataset,
         "YawSequenceDataset": YawSequenceDataset,
+        "YawSequenceDataset2": YawSequenceDataset2,
     }
 
     dataset_cfg = config["dataloader"]["dataset"]
@@ -225,6 +290,7 @@ def analyse_data() -> None:
     """"""
     import numpy as np
     import os
+    from tqdm.auto import tqdm
 
     os.environ[
         "DATA_ROOT"
@@ -232,16 +298,16 @@ def analyse_data() -> None:
 
     cfg = {
         "dataloader": {
-            "dataset": {"type": "YawSequenceDataset", "args": {}},
+            "dataset": {"type": "YawSequenceDataset2", "args": {}},
             "batch_size": 16,
-            "workers": 2,
+            "workers": 0,
         }
     }
     train, val = get_dataloader(cfg)
 
     for split in [train, val]:
         angles = []
-        for data in split:
+        for data in tqdm(split, ncols=50):
             angles.append(data["yaw"].numpy())
         np.concatenate(angles)
         print(np.histogram(angles))

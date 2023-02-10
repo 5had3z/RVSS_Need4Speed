@@ -181,7 +181,7 @@ def _forward_impl_patch(self, x: Tensor) -> Tensor:
 class SequenceModel(nn.Module):
     def __init__(self, max_history: float = 3, class_decoder: bool = False) -> None:
         super().__init__()
-        self.encoder = mobilenet_v3_small(weights=MobileNet_V3_Small_Weights)
+        self.encoder = mobilenet_v3_small(weights=MobileNet_V3_Small_Weights.DEFAULT)
         # moneky patch to not classify
         self.encoder._forward_impl = _forward_impl_patch.__get__(
             self.encoder, MobileNetV3
@@ -241,9 +241,13 @@ class SequenceModel(nn.Module):
 class SequenceModel2(SequenceModel):
     """Keys include both time and image features"""
 
-    def __init__(self, *args, class_decoder: bool = False, **kwargs) -> None:
+    def __init__(
+        self, *args, class_decoder: bool = False, history_length: int = 16, **kwargs
+    ) -> None:
         super().__init__(*args, class_decoder=class_decoder, **kwargs)
-        self.decoder = TimeDecoder2(self.encoder_dim, class_decoder=class_decoder)
+        self.decoder = TimeDecoder2(
+            self.encoder_dim, history_length=history_length, class_decoder=class_decoder
+        )
 
     def forward(self, inputs: Dict[str, Tensor]) -> Tensor:
         """Image stack [b,t,c,h,w]"""
@@ -266,7 +270,7 @@ class SequenceModel2(SequenceModel):
 class SingleModel(nn.Module):
     def __init__(self) -> None:
         super().__init__()
-        self.encoder = mobilenet_v3_small(weights=MobileNet_V3_Small_Weights)
+        self.encoder = mobilenet_v3_small(weights=MobileNet_V3_Small_Weights.DEFAULT)
         # moneky patch to not classify
         self.encoder._forward_impl = _forward_impl_patch.__get__(
             self.encoder, MobileNetV3
