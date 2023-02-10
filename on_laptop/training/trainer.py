@@ -47,7 +47,10 @@ def resume_checkpoint(modules: TrainModules, ckpt_path: Path) -> int:
 
 def calc_accuracy(pred_yaw: Tensor, truth_yaw: Tensor) -> Dict[str, float]:
     if truth_yaw.shape[-1] == 1:
-        return {"mse": (truth_yaw - pred_yaw).pow(2).mean().item()}
+        mse = (truth_yaw - pred_yaw).pow(2).mean().item()
+        correct = (truth_yaw - pred_yaw).abs() < 0.1
+        accuracy = correct.sum() / correct.nelement()
+        return {"mse": mse, "accuracy": accuracy}
 
     pred_logits = pred_yaw.argmax(dim=-1)
     accuracy = (pred_logits == truth_yaw).sum() / truth_yaw.nelement()
