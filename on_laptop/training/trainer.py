@@ -8,6 +8,7 @@ import torch
 from torch import nn, Tensor, inference_mode
 from torch.utils.tensorboard.writer import SummaryWriter
 from tqdm.auto import tqdm
+import intel_extension_for_pytorch as ipex
 
 from model import get_model
 from dataloader import get_dataloader, DataLoader
@@ -141,12 +142,21 @@ def validate_epoch(
         )
 
 
-def train(modules: TrainModules, epochs: int, root_path: Path):
+def train(
+    modules: TrainModules, epochs: int, root_path: Path, ipex_enable: bool = False
+):
     """Train model to target epoch, save checkpoints to root_path"""
     logger = SummaryWriter(root_path)
 
     ckpt_path = root_path / "latest.pth"
     start_epoch = resume_checkpoint(modules, ckpt_path) if ckpt_path.exists() else 0
+
+    if ipex_enable:
+        modules.model, modules.optimizer = ipex.optimize(
+            modules.model, optimizer=modules.optimizer, dtype=torch.float32
+        )
+        modules.train_loader.ch_last = True
+        modules.val_loader.ch_last = True
 
     for epoch in range(start_epoch, epochs):
         logger.add_scalar(
@@ -175,6 +185,10 @@ def train(modules: TrainModules, epochs: int, root_path: Path):
         modules.scheduler.step()
 
         save_checkpoint(modules, epoch + 1, ckpt_path)
+        if (epoch + 1) % 10 == 0:
+            save_checkpoint(
+                modules, epoch + 1, ckpt_path.parent / f"epoch_{epoch:03}.pth"
+            )
 
 
 def get_args() -> Namespace:
@@ -186,6 +200,7 @@ def get_args() -> Namespace:
     parser.add_argument(
         "-w", "--workers", default=0, type=int, help="Dataloader Workers"
     )
+    parser.add_argument("-i", "--ipex", action="store_true")
     return parser.parse_args()
 
 
@@ -205,7 +220,7 @@ def main() -> None:
         config = yaml.safe_load(f)
     config["dataloader"]["workers"] = args.workers
     train_modules = initialize_modules(config)
-    train(train_modules, args.epochs, exp_path)
+    train(train_modules, args.epochs, exp_path, args.ipex)
 
 
 if __name__ == "__main__":

@@ -45,6 +45,7 @@ def write_dataset(dataset: List[YawRateSample], ann_file: Path) -> None:
 
 class YawDataset(Dataset):
     base_shape = [240, 320]
+    ch_last = False
 
     def __init__(
         self, split: Literal["train", "val"], downsample: int = 1, classes: bool = False
@@ -72,7 +73,7 @@ class YawDataset(Dataset):
             transform.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
         )
         if split == "train":
-            transforms.append(transform.ColorJitter(0.5, 0.2, 0.2, 0.2))
+            transforms.append(transform.ColorJitter(0.2, 0.1, 0.1, 0.1))
 
         self.transform = transform.Compose(transforms)
         self.classes = classes
@@ -94,6 +95,9 @@ class YawDataset(Dataset):
         label = tensor([sample.yaw])
         if self.classes:
             label = self._yaw_2_class(label)
+
+        if self.ch_last:
+            im = im.to(memory_format=torch.channels_last)
 
         return {"image": im, "yaw": label}
 
@@ -139,6 +143,8 @@ class YawSequenceDataset(YawDataset):
         for sample in self.dataset[index]:
             im = Image.open(str(self.root / sample.filename))
             ims.append(self.transform(im))
+            if self.ch_last:
+                ims[-1] = ims[-1].to(memory_format=torch.channels_last)
 
         end_time = self.dataset[index][-1].time.timestamp()
         t_delta = tensor([end_time - s.time.timestamp() for s in self.dataset[index]])
@@ -200,6 +206,8 @@ class YawSequenceDataset2(YawDataset):
             sample = self.dataset[idx]
             im = Image.open(str(self.root / sample.filename))
             ims.append(self.transform(im))
+            if self.ch_last:
+                ims[-1] = ims[-1].to(memory_format=torch.channels_last)
 
         end_time = self.dataset[e_idx - 1].time.timestamp()
         t_delta = tensor(
