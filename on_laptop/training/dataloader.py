@@ -290,13 +290,25 @@ def split_data() -> None:
     assert 0 < ratio < 1, f"Train ratio needs to be 0<{ratio}<1"
 
     data = accumulate_subsets(root)
-    n_train = int(len(data) * ratio)
 
-    split_file = root / f"annotation_train_v3.txt"
-    write_dataset(data[:n_train], split_file)
+    # use interleaving method to split
+    chunk_size = 400
+    train_data = []
+    val_data = []
+    n_train = int(chunk_size * ratio)
+    for s_idx in range(0, len(data), chunk_size):
+        val_idx = s_idx + n_train
+        train_data.extend(data[s_idx:val_idx])
+        val_data.extend(data[val_idx : s_idx + chunk_size])
 
-    split_file = root / f"annotation_val_v3.txt"
-    write_dataset(data[n_train:], split_file)
+    leftover_idx = len(data) % chunk_size
+    train_data.extend(data[-leftover_idx:])
+
+    split_file = root / f"annotation_train_v4.txt"
+    write_dataset(train_data, split_file)
+
+    split_file = root / f"annotation_val_v4.txt"
+    write_dataset(val_data, split_file)
 
     print(f"finished splitting {len(data)} samples")
 
@@ -309,13 +321,13 @@ def analyse_data() -> None:
 
     os.environ[
         "DATA_ROOT"
-    ] = "/home/bpfer/cloned-repos/RVSS_Need4Speed/on_laptop/training/data/first_run"
+    ] = "/home/bryce/cloned-repos/RVSS_Need4Speed/on_laptop/training/data"
 
     cfg = {
         "dataloader": {
-            "dataset": {"type": "YawSequenceDataset2", "args": {}},
+            "dataset": {"type": "YawSequenceDataset2", "args": {"suffix": "v4"}},
             "batch_size": 16,
-            "workers": 4,
+            "workers": 8,
         }
     }
     train, val = get_dataloader(cfg)
@@ -324,9 +336,12 @@ def analyse_data() -> None:
         angles = []
         for data in tqdm(split, ncols=50):
             angles.append(torch.round(data["yaw"] * 10).numpy())
-        angles = np.concatenate(angles)
-        print(np.bincount(angles))
+        angles = np.concatenate(angles).astype(np.int64)
+        count = np.bincount(angles + 5)
+        print(count)
+        print(1 - count / count.sum())
 
 
 if __name__ == "__main__":
     split_data()
+    # analyse_data()

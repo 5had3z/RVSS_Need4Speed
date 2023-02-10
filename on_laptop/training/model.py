@@ -184,9 +184,16 @@ def _forward_impl_patch(self, x: Tensor) -> Tensor:
 
 
 class SequenceModel(nn.Module):
-    def __init__(self, max_history: float = 3, class_decoder: bool = False) -> None:
+    def __init__(
+        self,
+        max_history: float = 3,
+        class_decoder: bool = False,
+        pretrained: bool = True,
+    ) -> None:
         super().__init__()
-        self.encoder = mobilenet_v3_small(weights=MobileNet_V3_Small_Weights.DEFAULT)
+        self.encoder = mobilenet_v3_small(
+            weights=MobileNet_V3_Small_Weights.DEFAULT if pretrained else None
+        )
         # moneky patch to not classify
         self.encoder._forward_impl = _forward_impl_patch.__get__(
             self.encoder, MobileNetV3
@@ -302,9 +309,11 @@ class SequenceModel2(SequenceModel):
 
 
 class SingleModel(nn.Module):
-    def __init__(self) -> None:
+    def __init__(self, pretrained: bool = True) -> None:
         super().__init__()
-        self.encoder = mobilenet_v3_small(weights=MobileNet_V3_Small_Weights.DEFAULT)
+        self.encoder = mobilenet_v3_small(
+            weights=MobileNet_V3_Small_Weights.DEFAULT if pretrained else None
+        )
         # moneky patch to not classify
         self.encoder._forward_impl = _forward_impl_patch.__get__(
             self.encoder, MobileNetV3
