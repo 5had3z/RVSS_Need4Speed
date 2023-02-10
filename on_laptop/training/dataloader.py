@@ -308,7 +308,7 @@ def analyse_data() -> None:
         "dataloader": {
             "dataset": {"type": "YawSequenceDataset2", "args": {}},
             "batch_size": 16,
-            "workers": 0,
+            "workers": 4,
         }
     }
     train, val = get_dataloader(cfg)
@@ -316,9 +316,9 @@ def analyse_data() -> None:
     for split in [train, val]:
         angles = []
         for data in tqdm(split, ncols=50):
-            angles.append(data["yaw"].numpy())
-        np.concatenate(angles)
-        print(np.histogram(angles))
+            angles.append(torch.round(data["yaw"] * 10).numpy())
+        angles = np.concatenate(angles)
+        print(np.bincount(angles))
 
 
 if __name__ == "__main__":

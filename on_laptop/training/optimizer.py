@@ -2,11 +2,11 @@ from typing import Dict
 
 from torch import nn
 from torch.optim.lr_scheduler import ExponentialLR, _LRScheduler
-from torch.optim import SGD, Optimizer
+from torch.optim import SGD, AdamW, Optimizer
 
 
 def get_optimizer(config, model: nn.Module) -> Optimizer:
-    optims: Dict[str, Optimizer] = {"SGD": SGD}
+    optims: Dict[str, Optimizer] = {"SGD": SGD, "AdamW": AdamW}
     optim = optims[config["optimizer"]["type"]](
         model.parameters(), **config["optimizer"]["args"]
     )

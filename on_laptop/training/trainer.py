@@ -65,6 +65,7 @@ def train_epoch(
     epoch: int,
     max_epoch: int,
 ) -> None:
+    model.train()
 
     with tqdm(
         total=len(dataloader), desc=f"Training [{epoch:03}|{max_epoch:03}]"
@@ -107,6 +108,8 @@ def validate_epoch(
     max_epoch: int,
 ) -> None:
     # Statistic accumulators
+    model.eval()
+
     acc_samples: Dict[str, List[float]] = {}
     loss_samples: Dict[str, List[float]] = {c: [] for c in criterion}
 

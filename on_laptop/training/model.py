@@ -128,6 +128,7 @@ class TimeDecoder2(nn.Module):
         hidden_dim: int = 256,
         history_length: int = 16,
         class_decoder: bool = False,
+        residual_mlp: bool = False,
     ) -> None:
         super().__init__()
         self.history_length = history_length
@@ -144,6 +145,8 @@ class TimeDecoder2(nn.Module):
             self.time_query.normal_(0.0, 0.02).clamp_(-2.0, 2.0)
 
         # Setup decoding output of mhsa to a yaw estimate
+        if residual_mlp:
+            self.decode_mlp = mlp(hidden_dim)
         self.decode_yawrate = nn.Linear(hidden_dim, 11 if class_decoder else 1)
 
     def forward(self, im_feats: Tensor, time_encoding: Tensor) -> Tensor:
@@ -156,6 +159,8 @@ class TimeDecoder2(nn.Module):
         comb_keys = torch.cat([time_encoding, im_keys], dim=-1)
 
         yaw_embed, _ = self.time_attn(time_query, comb_keys, im_values)
+        if hasattr(self, "decode_mlp"):
+            yaw_embed = self.decode_mlp(yaw_embed) + yaw_embed
         yaw_estimate = self.decode_yawrate(yaw_embed)
         return yaw_estimate
 
