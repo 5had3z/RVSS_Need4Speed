@@ -85,6 +85,7 @@ class TimeDecoder(nn.Module):
         input_dim: int,
         hidden_dim: int = 256,
         history_length: int = 16,
+        class_decoder: bool = False,
     ) -> None:
         super().__init__()
         self.history_length = history_length
@@ -107,7 +108,7 @@ class TimeDecoder(nn.Module):
             self.time_query.normal_(0.0, 0.02).clamp_(-2.0, 2.0)
 
         # Setup decoding output of mhsa to a yaw estimate
-        self.decode_yawrate = nn.Linear(hidden_dim, 1)
+        self.decode_yawrate = nn.Linear(hidden_dim, 11 if class_decoder else 1)
 
     def forward(self, im_feats: Tensor, time_encoding: Tensor) -> Tensor:
         bs = im_feats.shape[0]
@@ -139,7 +140,7 @@ def _forward_impl_patch(self, x: Tensor) -> Tensor:
 
 
 class SequenceModel(nn.Module):
-    def __init__(self, max_history: float = 3) -> None:
+    def __init__(self, max_history: float = 3, class_decoder: bool = False) -> None:
         super().__init__()
         self.encoder = mobilenet_v3_small(weights=MobileNet_V3_Small_Weights)
         # moneky patch to not classify
@@ -147,7 +148,7 @@ class SequenceModel(nn.Module):
             self.encoder, MobileNetV3
         )
         self.encoder_dim = self.encoder.classifier[0].in_features
-        self.decoder = TimeDecoder(self.encoder_dim)
+        self.decoder = TimeDecoder(self.encoder_dim, class_decoder=class_decoder)
         self.time_normalize = max_history
 
     def export_onnx(

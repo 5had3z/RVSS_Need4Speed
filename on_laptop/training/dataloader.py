@@ -46,7 +46,9 @@ def write_dataset(dataset: List[YawRateSample], ann_file: Path) -> None:
 class YawDataset(Dataset):
     base_shape = [240, 320]
 
-    def __init__(self, split: Literal["train", "val"], downsample: int = 1) -> None:
+    def __init__(
+        self, split: Literal["train", "val"], downsample: int = 1, classes: bool = False
+    ) -> None:
         super().__init__()
         assert split in {"train", "val"}, f"Incorrect split: {split}"
 
@@ -73,15 +75,26 @@ class YawDataset(Dataset):
             transforms.append(transform.ColorJitter(0.5, 0.2, 0.2, 0.2))
 
         self.transform = transform.Compose(transforms)
+        self.classes = classes
 
     def __len__(self) -> int:
         return len(self.dataset)
+
+    @staticmethod
+    def _yaw_2_class(yaw: Tensor) -> Tensor:
+        """Convert yaw to classes"""
+        yaw = torch.round(yaw * 10) + 5
+        return yaw.to(torch.long)
 
     def __getitem__(self, index: int) -> Tuple[Tensor, Tensor]:
         sample = self.dataset[index]
         im = Image.open(str(self.root / sample.filename))
         im = self.transform(im)
+
         label = tensor([sample.yaw])
+        if self.classes:
+            label = self._yaw_2_class(label)
+
         return {"image": im, "yaw": label}
 
 
@@ -132,6 +145,10 @@ class YawSequenceDataset(YawDataset):
 
         ims = torch.stack(ims, dim=0)
         label = tensor(self.dataset[index][-1].yaw)
+
+        if self.classes:
+            label = self._yaw_2_class(label)
+
         return {"image": ims, "time": t_delta, "yaw": label}
 
 
@@ -204,5 +221,31 @@ def split_data() -> None:
     print(f"finished splitting {len(data)} samples")
 
 
+def analyse_data() -> None:
+    """"""
+    import numpy as np
+    import os
+
+    os.environ[
+        "DATA_ROOT"
+    ] = "/home/bpfer/cloned-repos/RVSS_Need4Speed/on_laptop/training/data/first_run"
+
+    cfg = {
+        "dataloader": {
+            "dataset": {"type": "YawSequenceDataset", "args": {}},
+            "batch_size": 16,
+            "workers": 2,
+        }
+    }
+    train, val = get_dataloader(cfg)
+
+    for split in [train, val]:
+        angles = []
+        for data in split:
+            angles.append(data["yaw"].numpy())
+        np.concatenate(angles)
+        print(np.histogram(angles))
+
+
 if __name__ == "__main__":
-    split_data()
+    analyse_data()

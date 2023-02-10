@@ -53,11 +53,11 @@
             "cwd": "${workspaceFolder}/on_laptop/training",
             "args": [
                 "-x",
-                "checkpoints/l1_test",
+                "checkpoints/cls_test",
                 "--epochs",
-                "10",
+                "30",
                 "--workers",
-                "0"
+                "4"
             ],
             "env": {
                 "DATA_ROOT": "/home/bpfer/cloned-repos/RVSS_Need4Speed/on_laptop/training/data/first_run"

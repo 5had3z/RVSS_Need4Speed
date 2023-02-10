@@ -45,9 +45,13 @@ def resume_checkpoint(modules: TrainModules, ckpt_path: Path) -> int:
     return resume_dict["epoch"]
 
 
-def calc_mse(truth_yaw: Tensor, pred_yaw: Tensor) -> float:
-    mse = (truth_yaw - pred_yaw).pow(2).mean()
-    return mse.item()
+def calc_accuracy(truth_yaw: Tensor, pred_yaw: Tensor) -> float:
+    if truth_yaw.shape[-1] == 1:
+        return "mse", (truth_yaw - pred_yaw).pow(2).mean().item()
+
+    pred_logits = pred_yaw.argmax(dim=-1)
+    accuracy = (pred_logits == truth_yaw).sum() / truth_yaw.nelement()
+    return "accuracy", accuracy
 
 
 def train_epoch(
@@ -66,7 +70,7 @@ def train_epoch(
 
             total_loss = torch.zeros(1)
             for crit in criterion:
-                loss: Tensor = criterion[crit](sample["yaw"][..., None], out)
+                loss: Tensor = criterion[crit](out, sample["yaw"])
                 logger.add_scalar(
                     f"train/{crit}", loss.item(), pbar.n + len(dataloader) * epoch
                 )
@@ -76,9 +80,9 @@ def train_epoch(
             optimizer.step()
 
             with torch.no_grad():
-                accuracy = calc_mse(sample["yaw"], out)
+                name, value = calc_accuracy(sample["yaw"], out)
                 logger.add_scalar(
-                    f"train/accuracy", accuracy, pbar.n + len(dataloader) * epoch
+                    f"train/{name}", value, pbar.n + len(dataloader) * epoch
                 )
 
             pbar.update(1)
@@ -92,20 +96,29 @@ def validate_epoch(
     logger: SummaryWriter,
     epoch: int,
 ) -> None:
+    # Statistic accumulators
+    acc_samples = []
+    loss_samples = {c: [] for c in criterion}
+
     with tqdm(total=len(dataloader), desc="Validating") as pbar:
         for sample in dataloader:
             out = model(sample)
             for crit in criterion:
-                loss: Tensor = criterion[crit](sample["yaw"], out)
-                logger.add_scalar(
-                    f"validate/{crit}", loss.item(), pbar.n + len(dataloader) * epoch
-                )
+                loss: Tensor = criterion[crit](out, sample["yaw"])
+                loss_samples[crit].append(loss.item())
 
-            accuracy = calc_mse(sample["yaw"], out)
-            logger.add_scalar(
-                f"validate/accuracy", accuracy, pbar.n + len(dataloader) * epoch
-            )
+            name, value = calc_accuracy(sample["yaw"], out)
+            acc_samples.append(value)
             pbar.update(1)
+
+    # Log statistics
+    logger.add_scalar(
+        f"validate/{name}", sum(acc_samples) / len(acc_samples), len(dataloader) * epoch
+    )
+    for crit, samples in loss_samples.items():
+        logger.add_scalar(
+            f"validate/{crit}", sum(samples) / len(samples), len(dataloader) * epoch
+        )
 
 
 def train(modules: TrainModules, epochs: int, root_path: Path):
