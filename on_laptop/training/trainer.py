@@ -61,9 +61,12 @@ def train_epoch(
     optimizer: Optimizer,
     logger: SummaryWriter,
     epoch: int,
+    max_epoch: int,
 ) -> None:
 
-    with tqdm(total=len(dataloader), desc="Training") as pbar:
+    with tqdm(
+        total=len(dataloader), desc=f"Training [{epoch:03}|{max_epoch:03}]"
+    ) as pbar:
         for sample in dataloader:
             optimizer.zero_grad()
             out = model(sample)
@@ -95,12 +98,15 @@ def validate_epoch(
     criterion: nn.Module,
     logger: SummaryWriter,
     epoch: int,
+    max_epoch: int,
 ) -> None:
     # Statistic accumulators
     acc_samples = []
     loss_samples = {c: [] for c in criterion}
 
-    with tqdm(total=len(dataloader), desc="Validating") as pbar:
+    with tqdm(
+        total=len(dataloader), desc=f"Validating [{epoch:03}|{max_epoch:03}]"
+    ) as pbar:
         for sample in dataloader:
             out = model(sample)
             for crit in criterion:
@@ -135,6 +141,7 @@ def train(modules: TrainModules, epochs: int, root_path: Path):
             modules.optimizer,
             logger,
             epoch,
+            epochs,
         )
 
         validate_epoch(
@@ -143,6 +150,7 @@ def train(modules: TrainModules, epochs: int, root_path: Path):
             modules.criterion,
             logger,
             epoch + 1,
+            epochs,
         )
 
         save_checkpoint(modules, epoch + 1, ckpt_path)
