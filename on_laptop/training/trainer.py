@@ -1,7 +1,7 @@
 from pathlib import Path
 from argparse import ArgumentParser, Namespace
 from dataclasses import dataclass
-from typing import Dict
+from typing import Dict, List
 import yaml
 
 import torch
@@ -44,14 +44,14 @@ def resume_checkpoint(modules: TrainModules, ckpt_path: Path) -> int:
     return resume_dict["epoch"]
 
 
-def calc_accuracy(truth_yaw: Tensor, pred_yaw: Tensor) -> float:
+def calc_accuracy(pred_yaw: Tensor, truth_yaw: Tensor) -> Dict[str, float]:
     if truth_yaw.shape[-1] == 1:
         return {"mse": (truth_yaw - pred_yaw).pow(2).mean().item()}
 
     pred_logits = pred_yaw.argmax(dim=-1)
     accuracy = (pred_logits == truth_yaw).sum() / truth_yaw.nelement()
     # cls/10 = angle radians
-    mse = ((truth_yaw - pred_yaw) / 10).pow(2).mean().item()
+    mse = ((truth_yaw - pred_logits) / 10).pow(2).mean().item()
     return {"accuracy": accuracy, "mse": mse}
 
 
@@ -70,11 +70,11 @@ def train_epoch(
     ) as pbar:
         for sample in dataloader:
             optimizer.zero_grad()
-            out = model(sample)
+            preds = model(sample)
 
             total_loss = torch.zeros(1)
             for crit in criterion:
-                loss: Tensor = criterion[crit](out, sample["yaw"])
+                loss: Tensor = criterion[crit](preds, sample["yaw"])
                 logger.add_scalar(
                     f"train/{crit}", loss.item(), pbar.n + len(dataloader) * epoch
                 )
@@ -84,10 +84,11 @@ def train_epoch(
             optimizer.step()
 
             with torch.no_grad():
-                name, value = calc_accuracy(sample["yaw"], out)
-                logger.add_scalar(
-                    f"train/{name}", value, pbar.n + len(dataloader) * epoch
-                )
+                stats = calc_accuracy(preds, sample["yaw"])
+                for name, value in stats.items():
+                    logger.add_scalar(
+                        f"train/{name}", value, pbar.n + len(dataloader) * epoch
+                    )
 
             pbar.update(1)
 
@@ -102,26 +103,31 @@ def validate_epoch(
     max_epoch: int,
 ) -> None:
     # Statistic accumulators
-    acc_samples = []
-    loss_samples = {c: [] for c in criterion}
+    acc_samples: Dict[str, List[float]] = {}
+    loss_samples: Dict[str, List[float]] = {c: [] for c in criterion}
 
     with tqdm(
         total=len(dataloader), desc=f"Validating [{epoch:03}|{max_epoch:03}]"
     ) as pbar:
         for sample in dataloader:
-            out = model(sample)
+            preds = model(sample)
             for crit in criterion:
-                loss: Tensor = criterion[crit](out, sample["yaw"])
+                loss: Tensor = criterion[crit](preds, sample["yaw"])
                 loss_samples[crit].append(loss.item())
 
-            name, value = calc_accuracy(sample["yaw"], out)
-            acc_samples.append(value)
+            stats = calc_accuracy(preds, sample["yaw"])
+            for name, value in stats.items():
+                if name not in acc_samples:
+                    acc_samples[name] = []
+                acc_samples[name].append(value)
+
             pbar.update(1)
 
     # Log statistics
-    logger.add_scalar(
-        f"validate/{name}", sum(acc_samples) / len(acc_samples), len(dataloader) * epoch
-    )
+    for stat, samples in acc_samples.items():
+        logger.add_scalar(
+            f"validate/{stat}", sum(samples) / len(samples), len(dataloader) * epoch
+        )
     for crit, samples in loss_samples.items():
         logger.add_scalar(
             f"validate/{crit}", sum(samples) / len(samples), len(dataloader) * epoch
